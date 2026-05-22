@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tax Function Discovery — The Tax Graph</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #0a1f38;
+    --paper: #f0f4f8;
+    --gold: #7ba7c7;
+    --gold-light: #a8c8e0;
+    --muted: #4a6a85;
+    --border: #c5d8e8;
+    --white: #ffffff;
+    --success: #2d6a4f;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  /* Header */
+  .header {
+    position: relative;
+    padding: 3rem 2rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--ink);
+    color: var(--paper);
+    overflow: hidden;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7ba7c7, #a8c8e0, #7ba7c7);
+  }
+
+  .header-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .brand {
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .brand::before { display: none; }
+
+  .header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 400;
+    line-height: 1.1;
+    margin-bottom: 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  .header h1 em {
+    font-style: italic;
+    color: #a8c8e0;
+  }
+
+  .header p {
+    color: #a09a91;
+    font-size: 1rem;
+    line-height: 1.65;
+    max-width: 520px;
+  }
+
+  /* Progress */
+  .progress-bar-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--ink);
+    height: 4px;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #7ba7c7, #a8c8e0);
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+
+  /* Main */
+  .main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3rem 2rem 6rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Section labels */
+  .section-label {
+    font-family: 'DM Serif Display', serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 2rem;
+    margin-top: 3.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .section-label:first-child { margin-top: 0; }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Question block */
+  .question-block {
+    margin-bottom: 2.2rem;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .question-block:nth-child(1)  { animation-delay: 0.05s; }
+  .question-block:nth-child(2)  { animation-delay: 0.1s;  }
+  .question-block:nth-child(3)  { animation-delay: 0.15s; }
+  .question-block:nth-child(4)  { animation-delay: 0.2s;  }
+  .question-block:nth-child(5)  { animation-delay: 0.25s; }
+  .question-block:nth-child(6)  { animation-delay: 0.3s;  }
+
+  label.q-label {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+  }
+
+  label.q-label span.q-num {
+    font-family: 'DM Serif Display', serif;
+    color: var(--gold);
+    margin-right: 0.4rem;
+    font-size: 1rem;
+  }
+
+  .q-hint {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 0.65rem;
+    font-style: italic;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  textarea,
+  select {
+    width: 100%;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0.75rem 1rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.92rem;
+    font-weight: 300;
+    color: var(--ink);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    appearance: none;
+  }
+
+  input[type="text"]:focus,
+  input[type="email"]:focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(200,169,74,0.12);
+  }
+
+  textarea {
+    min-height: 100px;
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  /* Radio / Checkbox groups */
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .option-item {
+    position: relative;
+  }
+
+  .option-item input[type="checkbox"],
+  .option-item input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .option-item label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    transition: all 0.18s;
+    background: var(--white);
+    color: var(--ink);
+    user-select: none;
+  }
+
+  .option-item label::before {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    flex-shrink: 0;
+    transition: all 0.18s;
+    background: transparent;
+  }
+
+  .option-item input[type="radio"] + label::before {
+    border-radius: 50%;
+  }
+
+  .option-item input:checked + label {
+    border-color: var(--gold);
+    background: #fdf8ec;
+    color: var(--ink);
+  }
+
+  .option-item input:checked + label::before {
+    background: var(--gold);
+    border-color: var(--gold);
+  }
+
+  .option-item label:hover {
+    border-color: var(--gold-light);
+    background: #fefcf5;
+  }
+
+  /* Respondent info */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  @media (max-width: 560px) {
+    .info-grid { grid-template-columns: 1fr; }
+    .options-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Submit */
+  .submit-wrap {
+    margin-top: 3.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .submit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    padding: 1rem 2.5rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.92rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .submit-btn::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), var(--gold-light));
+    transform: scaleX(0);
+    transition: transform 0.3s;
+  }
+
+  .submit-btn:hover { background: #1a2332; }
+  .submit-btn:hover::after { transform: scaleX(1); }
+
+  .submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .submit-btn svg {
+    transition: transform 0.2s;
+  }
+
+  .submit-btn:hover svg {
+    transform: translateX(4px);
+  }
+
+  .submit-note {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* Error state */
+  .field-error {
+    font-size: 0.8rem;
+    color: #c0392b;
+    margin-top: 0.4rem;
+  }
+
+  input.error, textarea.error {
+    border-color: #c0392b;
+  }
+
+  /* Thank you screen */
+  #thank-you {
+    display: none;
+    min-height: 80vh;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4rem 2rem;
+    animation: fadeUp 0.7s ease both;
+  }
+
+  #thank-you.visible {
+    display: flex;
+  }
+
+  .ty-inner {
+    max-width: 560px;
+  }
+
+  .ty-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0a1f38, #7ba7c7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 2rem;
+    font-size: 1.8rem;
+  }
+
+  .ty-inner h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    line-height: 1.15;
+    margin-bottom: 1.2rem;
+    color: var(--ink);
+  }
+
+  .ty-inner h2 em {
+    font-style: italic;
+    color: #7ba7c7;
+  }
+
+  .ty-inner p {
+    font-size: 1rem;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 0.8rem;
+  }
+
+  .ty-brand {
+    margin-top: 2.5rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--border);
+  }
+
+  /* Status message */
+  #status-msg {
+    margin-top: 1rem;
+    font-size: 0.88rem;
+    color: var(--muted);
+    min-height: 1.2em;
+  }
+
+  #status-msg.error { color: #c0392b; }
+  #status-msg.success { color: var(--success); }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(245,242,235,0.3);
+    border-top-color: var(--paper);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="form-wrapper">
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 622.66 169.36" style="height:38px;width:auto;display:block;"><defs><style>.d{fill:#fff;}</style></defs><g><path class="d" d="M4.54,39.01L70.01,1.22c2.81-1.62,6.28-1.62,9.09,0l56.37,32.55c6.06,3.5,6.06,12.24,0,15.74L22.28,114.85c-3.02,1.74-3.02,6.1,0,7.84l45.11,26.05c3.18,1.83,7.15-.46,7.15-4.13v-36.85c0-3.25,1.73-6.25,4.54-7.87l28.19-16.27c2.81-1.62,6.28-1.62,9.09,0l28.19,16.27c2.81,1.62,4.54,4.62,4.54,7.87v14.71c0,3.25-1.73,6.25-4.54,7.87l-65.46,37.79c-2.81,1.62-6.28,1.62-9.09,0L4.54,130.34c-2.81-1.62-4.54-4.62-4.54-7.87V46.88c0-3.25,1.73-6.25,4.54-7.87Z"/><g><path class="d" d="M230.26,60.31v54.38h-10.13V60.31h-9.84v-9.27h29.63v9.27h-9.65Z"/><path class="d" d="M266.42,114.68v-26.76h-10.7v26.76h-10.13V51.04h10.13v27.62h10.7v-27.62h10.13v63.65h-10.13Z"/><path class="d" d="M283.69,114.68V51.04h25.42v8.98h-15.29v17.59h10.61v8.41h-10.61v19.4h15.29v9.27h-25.42Z"/><path class="d" d="M348.19,60.31v54.38h-10.13V60.31h-9.84v-9.27h29.63v9.27h-9.65Z"/><path class="d" d="M379.29,114.68l-1.62-12.42h-9.27l-1.91,12.42h-9.27l10.61-63.65h11.18l10.61,63.65h-10.32Zm-5.92-46.92l-3.73,25.99h6.88l-3.15-25.99Z"/><path class="d" d="M416.4,114.68l-6.21-22.17-6.69,22.17h-9.84l10.89-31.82-10.23-31.82h10.51l5.73,22.65,6.5-22.65h9.75l-10.51,30.68,10.51,32.97h-10.42Z"/><path class="d" d="M471.82,114.68l-1.53-4.3c-1.72,3.63-5.45,5.45-9.75,5.45-8.41,0-13.67-6.02-13.67-14.62v-36.7c0-7.93,5.92-14.62,15.29-14.62s14.62,6.5,14.62,14.62v8.5h-9.56v-9.08c0-2.68-1.62-4.87-5.07-4.87s-5.07,2.29-5.07,4.97v37.84c0,2.77,1.82,5.06,5.16,5.06s5.16-2.29,5.16-5.06v-11.37h-4.97v-7.65h14.81v31.82h-5.45Z"/><path class="d" d="M508.43,114.97c-3.92,0-5.45-3.82-5.45-8.79v-13.67c0-2.58-1.34-4.68-4.11-4.68h-4.97v26.85h-10.13V51.04h16.25c7.07,0,12.52,3.92,12.52,12.52v11.28c0,4.3-1.91,7.45-6.02,8.98,4.11,1.43,6.21,4.87,6.21,8.79v13c0,2.87,.67,4.87,1.91,6.5v2.87h-6.21Zm-5.83-51.13c0-2.68-1.05-4.11-3.44-4.11h-5.26v20.16h4.87c2.49,0,3.82-1.43,3.82-4.49v-11.56Z"/><path class="d" d="M541.11,114.68l-1.62-12.42h-9.27l-1.91,12.42h-9.27l10.61-63.65h11.18l10.61,63.65h-10.32Zm-5.92-46.92l-3.73,25.99h6.88l-3.15-25.99Z"/><path class="d" d="M573.13,89.55h-6.12v25.13h-10.13V51.04h16.25c7.26,0,12.42,4.01,12.42,12.9v12.81c0,8.79-5.16,12.81-12.42,12.81Zm2.58-25.61c0-2.77-1.05-4.2-3.44-4.2h-5.26v21.69h5.26c2.39,0,3.44-1.43,3.44-4.2v-13.28Z"/><path class="d" d="M612.53,114.68v-26.76h-10.7v26.76h-10.13V51.04h10.13v27.62h10.7v-27.62h10.13v63.65h-10.13Z"/></g></g></svg>
+      </div>
+      <h1>Tax Function <em>Discovery</em><br>Questionnaire</h1>
+      <p>Help us understand where your tax function stands today — so we can map exactly where it needs to go tomorrow.</p>
+    </div>
+  </header>
+
+  <div class="progress-bar-wrap">
+    <div class="progress-bar" id="progress-bar"></div>
+  </div>
+
+  <main class="main">
+    <form id="discovery-form" novalidate>
+
+      <!-- Respondent info -->
+      <div class="section-label">About You</div>
+
+      <div class="info-grid">
+        <div class="question-block">
+          <label class="q-label" for="name">Your Name <span style="color:#c0392b">*</span></label>
+          <input type="text" id="name" name="name" placeholder="Jane Smith" required />
+        </div>
+        <div class="question-block">
+          <label class="q-label" for="role">Your Role / Title</label>
+          <input type="text" id="role" name="role" placeholder="Head of Tax" />
+        </div>
+        <div class="question-block">
+          <label class="q-label" for="company">Organisation <span style="color:#c0392b">*</span></label>
+          <input type="text" id="company" name="company" placeholder="Acme Ltd" required />
+        </div>
+        <div class="question-block">
+          <label class="q-label" for="email">Email Address <span style="color:#c0392b">*</span></label>
+          <input type="email" id="email" name="email" placeholder="jane@acme.com" required />
+        </div>
+      </div>
+
+      <!-- Section 1 -->
+      <div class="section-label">Tax Coverage &amp; Team Structure</div>
+
+      <div class="question-block">
+        <label class="q-label" for="q1"><span class="q-num">01</span>What tax areas does your department cover?</label>
+        <p class="q-hint">Select all that apply</p>
+        <div class="options-grid" id="q1-options">
+          <div class="option-item"><input type="checkbox" id="q1-a" name="q1" value="Corporate Tax"><label for="q1-a">Corporate Tax</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-b" name="q1" value="VAT / GST"><label for="q1-b">VAT / GST</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-c" name="q1" value="Transfer Pricing"><label for="q1-c">Transfer Pricing</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-d" name="q1" value="Customs & Trade"><label for="q1-d">Customs &amp; Trade</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-e" name="q1" value="Payroll Tax"><label for="q1-e">Payroll Tax</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-f" name="q1" value="Withholding Tax"><label for="q1-f">Withholding Tax</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-g" name="q1" value="Tax Reporting & Compliance"><label for="q1-g">Tax Reporting &amp; Compliance</label></div>
+          <div class="option-item"><input type="checkbox" id="q1-h" name="q1" value="Tax Controversy"><label for="q1-h">Tax Controversy</label></div>
+        </div>
+        <div style="margin-top:0.6rem">
+          <input type="text" id="q1-other" name="q1-other" placeholder="Other areas…" />
+        </div>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q2"><span class="q-num">02</span>How many tax professionals work in-house, and how are they structured?</label>
+        <p class="q-hint">e.g. "8 people — 2 specialists in TP, 4 generalists, 2 in compliance"</p>
+        <textarea id="q2" name="q2" placeholder="Describe your team size and structure…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q3"><span class="q-num">03</span>What tax areas are currently outsourced to external consultants?</label>
+        <textarea id="q3" name="q3" placeholder="e.g. Transfer pricing documentation, customs advisory…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q4"><span class="q-num">04</span>If you could hire 5 tax experts tomorrow, which areas would you prioritise — and why?</label>
+        <textarea id="q4" name="q4" placeholder="Share your thinking on where the biggest gaps are…"></textarea>
+      </div>
+
+      <!-- Section 2 -->
+      <div class="section-label">Systems &amp; Technology</div>
+
+      <div class="question-block">
+        <label class="q-label" for="q5"><span class="q-num">05</span>What ERP system(s) does your organisation use?</label>
+        <div class="options-grid">
+          <div class="option-item"><input type="checkbox" id="q5-a" name="q5" value="SAP"><label for="q5-a">SAP</label></div>
+          <div class="option-item"><input type="checkbox" id="q5-b" name="q5" value="Oracle"><label for="q5-b">Oracle</label></div>
+          <div class="option-item"><input type="checkbox" id="q5-c" name="q5" value="Microsoft Dynamics 365"><label for="q5-c">Microsoft Dynamics 365</label></div>
+          <div class="option-item"><input type="checkbox" id="q5-d" name="q5" value="Workday"><label for="q5-d">Workday</label></div>
+          <div class="option-item"><input type="checkbox" id="q5-e" name="q5" value="NetSuite"><label for="q5-e">NetSuite</label></div>
+        </div>
+        <div style="margin-top:0.6rem">
+          <input type="text" id="q5-other" name="q5-other" placeholder="Other ERP(s)…" />
+        </div>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q6"><span class="q-num">06</span>What tax-specific software or tools do you use?</label>
+        <p class="q-hint">e.g. ONESOURCE, Vertex, Alphatax, Corptax, TaxCalc</p>
+        <textarea id="q6" name="q6" placeholder="List the tools in use…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q7"><span class="q-num">07</span>What non-Microsoft tools are part of your current tech stack?</label>
+        <p class="q-hint">e.g. data tools, reporting platforms, collaboration software</p>
+        <textarea id="q7" name="q7" placeholder="e.g. Tableau, Slack, Notion, Power BI alternatives…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label"><span class="q-num">08</span>Are you currently using Microsoft Copilot?</label>
+        <div class="options-grid" style="grid-template-columns: repeat(3, 1fr)">
+          <div class="option-item"><input type="radio" id="q8-a" name="q8" value="Yes — actively"><label for="q8-a">Yes — actively</label></div>
+          <div class="option-item"><input type="radio" id="q8-b" name="q8" value="Yes — piloting"><label for="q8-b">Yes — piloting</label></div>
+          <div class="option-item"><input type="radio" id="q8-c" name="q8" value="No"><label for="q8-c">No</label></div>
+        </div>
+        <div style="margin-top:0.8rem">
+          <input type="text" id="q8-license" name="q8-license" placeholder="If yes, which licence? (e.g. M365 Copilot, Copilot Studio, GitHub Copilot)" />
+        </div>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q9"><span class="q-num">09</span>What Large Language Models (LLMs) does your organisation have access to?</label>
+        <div class="options-grid">
+          <div class="option-item"><input type="checkbox" id="q9-a" name="q9" value="Azure OpenAI / ChatGPT"><label for="q9-a">Azure OpenAI / ChatGPT</label></div>
+          <div class="option-item"><input type="checkbox" id="q9-b" name="q9" value="Microsoft Copilot"><label for="q9-b">Microsoft Copilot</label></div>
+          <div class="option-item"><input type="checkbox" id="q9-c" name="q9" value="Google Gemini"><label for="q9-c">Google Gemini</label></div>
+          <div class="option-item"><input type="checkbox" id="q9-d" name="q9" value="Claude (Anthropic)"><label for="q9-d">Claude (Anthropic)</label></div>
+          <div class="option-item"><input type="checkbox" id="q9-e" name="q9" value="None currently"><label for="q9-e">None currently</label></div>
+        </div>
+        <div style="margin-top:0.6rem">
+          <input type="text" id="q9-other" name="q9-other" placeholder="Other LLMs…" />
+        </div>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label"><span class="q-num">10</span>How would you describe the maturity of your data infrastructure?</label>
+        <div class="options-grid" style="grid-template-columns: 1fr 1fr;">
+          <div class="option-item"><input type="radio" id="q10-a" name="q10" value="Structured — data warehouse in place"><label for="q10-a">Structured — data warehouse in place</label></div>
+          <div class="option-item"><input type="radio" id="q10-b" name="q10" value="Mostly spreadsheet-driven"><label for="q10-b">Mostly spreadsheet-driven</label></div>
+          <div class="option-item"><input type="radio" id="q10-c" name="q10" value="Mixed — some systems, lots of manual work"><label for="q10-c">Mixed — some systems, lots of manual work</label></div>
+          <div class="option-item"><input type="radio" id="q10-d" name="q10" value="Early stage / fragmented"><label for="q10-d">Early stage / fragmented</label></div>
+        </div>
+      </div>
+
+      <!-- Section 3 -->
+      <div class="section-label">Processes &amp; Pain Points</div>
+
+      <div class="question-block">
+        <label class="q-label" for="q11"><span class="q-num">11</span>Which tax area carries the highest administrative burden today — and what drives that?</label>
+        <textarea id="q11" name="q11" placeholder="Describe the area and the root cause of the burden…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q12"><span class="q-num">12</span>How does your team currently handle data collection and consolidation for tax reporting?</label>
+        <textarea id="q12" name="q12" placeholder="e.g. manual data pulls from ERP, shared spreadsheets, automated feeds…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label"><span class="q-num">13</span>How much of your workflow relies on manual processes or Excel-based workarounds?</label>
+        <div class="options-grid" style="grid-template-columns: repeat(4, 1fr)">
+          <div class="option-item"><input type="radio" id="q13-a" name="q13" value="Almost everything"><label for="q13-a">Almost everything</label></div>
+          <div class="option-item"><input type="radio" id="q13-b" name="q13" value="More than half"><label for="q13-b">More than half</label></div>
+          <div class="option-item"><input type="radio" id="q13-c" name="q13" value="Some areas"><label for="q13-c">Some areas</label></div>
+          <div class="option-item"><input type="radio" id="q13-d" name="q13" value="Minimal"><label for="q13-d">Minimal</label></div>
+        </div>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q14"><span class="q-num">14</span>How do you currently manage tax documents and correspondence?</label>
+        <p class="q-hint">e.g. SharePoint, shared drives, email folders, dedicated DMS</p>
+        <textarea id="q14" name="q14" placeholder="Describe your document management approach…"></textarea>
+      </div>
+
+      <!-- Section 4 -->
+      <div class="section-label">AI &amp; Automation Readiness</div>
+
+      <div class="question-block">
+        <label class="q-label" for="q15"><span class="q-num">15</span>Has your organisation run any AI or automation pilots in the tax or finance function?</label>
+        <textarea id="q15" name="q15" placeholder="Describe any pilots, their outcomes, or why none have been initiated yet…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label"><span class="q-num">16</span>What is your organisation's general stance on AI adoption?</label>
+        <div class="options-grid" style="grid-template-columns: 1fr 1fr">
+          <div class="option-item"><input type="radio" id="q16-a" name="q16" value="Early adopter — actively investing"><label for="q16-a">Early adopter — actively investing</label></div>
+          <div class="option-item"><input type="radio" id="q16-b" name="q16" value="Cautiously exploring"><label for="q16-b">Cautiously exploring</label></div>
+          <div class="option-item"><input type="radio" id="q16-c" name="q16" value="Early stages — interest but limited action"><label for="q16-c">Early stages — interest but limited action</label></div>
+          <div class="option-item"><input type="radio" id="q16-d" name="q16" value="Not yet on the agenda"><label for="q16-d">Not yet on the agenda</label></div>
+        </div>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q17"><span class="q-num">17</span>Are there internal governance or compliance constraints around data use and AI tools?</label>
+        <p class="q-hint">e.g. data residency requirements, prohibited external LLM use, GDPR restrictions</p>
+        <textarea id="q17" name="q17" placeholder="Describe any constraints your team operates under…"></textarea>
+      </div>
+
+      <div class="question-block">
+        <label class="q-label" for="q18"><span class="q-num">18</span>What does success look like for your tax function over the next 12–24 months?</label>
+        <p class="q-hint">In an ideal world, what changes most?</p>
+        <textarea id="q18" name="q18" placeholder="Share your vision for a modernised tax function…"></textarea>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-wrap">
+        <button type="submit" class="submit-btn" id="submit-btn">
+          <span id="btn-label">Submit Questionnaire</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="btn-icon"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+        <p class="submit-note">Your responses are confidential and will only be used by The Tax Graph team to prepare your assessment.</p>
+        <div id="status-msg"></div>
+      </div>
+
+    </form>
+  </main>
+</div>
+
+<!-- Thank You Screen -->
+<div id="thank-you">
+  <div class="ty-inner">
+    <div class="ty-icon">✦</div>
+    <h2>Your insights are<br><em>invaluable.</em></h2>
+    <p>Thank you for taking the time to complete this questionnaire. What you've shared gives us a meaningful picture of your tax function — and that's exactly what great work starts with.</p>
+    <p>The Tax Graph team will review your responses carefully. Expect to hear from us shortly with a tailored perspective on where your function stands and the opportunities ahead.</p>
+    <p style="font-weight:500; color: var(--ink);">We look forward to the conversation.</p>
+    <div class="ty-brand">— The Tax Graph</div>
+  </div>
+</div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────────────────────────
+  // Replace this URL with your Google Apps Script Web App URL after deployment
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxDHDL6naJKWYY1wZVLLN1Gsceq747h77iZhhE2y3j9m-z2pkEs_0BW8NHD7ddvoR-EWA/exec';
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Progress bar
+  const progressBar = document.getElementById('progress-bar');
+  const allInputs = document.querySelectorAll('input, textarea');
+
+  function updateProgress() {
+    const filled = [...allInputs].filter(el => {
+      if (el.type === 'checkbox' || el.type === 'radio') return false;
+      return el.value.trim() !== '';
+    }).length;
+    const total = [...allInputs].filter(el => el.type !== 'checkbox' && el.type !== 'radio').length;
+    progressBar.style.width = Math.min(100, Math.round((filled / total) * 100)) + '%';
+  }
+
+  allInputs.forEach(el => el.addEventListener('input', updateProgress));
+
+  // Collect checkbox values
+  function getCheckboxValues(name) {
+    return [...document.querySelectorAll(`input[name="${name}"]:checked`)]
+      .map(el => el.value).join(', ');
+  }
+
+  function getRadioValue(name) {
+    const el = document.querySelector(`input[name="${name}"]:checked`);
+    return el ? el.value : '';
+  }
+
+  // Form submit
+  document.getElementById('discovery-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    // Basic validation
+    let valid = true;
+    ['name', 'company', 'email'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove('error');
+      if (!el.value.trim()) {
+        el.classList.add('error');
+        valid = false;
+      }
+    });
+
+    if (!valid) {
+      document.getElementById('status-msg').textContent = 'Please fill in the required fields (Name, Organisation, Email).';
+      document.getElementById('status-msg').className = 'error';
+      return;
+    }
+
+    // Build payload
+    const payload = {
+      timestamp: new Date().toISOString(),
+      name: document.getElementById('name').value,
+      role: document.getElementById('role').value,
+      company: document.getElementById('company').value,
+      email: document.getElementById('email').value,
+      q1_tax_areas: getCheckboxValues('q1') + (document.getElementById('q1-other').value ? ', ' + document.getElementById('q1-other').value : ''),
+      q2_team_structure: document.getElementById('q2').value,
+      q3_outsourced: document.getElementById('q3').value,
+      q4_hire_priorities: document.getElementById('q4').value,
+      q5_erp: getCheckboxValues('q5') + (document.getElementById('q5-other').value ? ', ' + document.getElementById('q5-other').value : ''),
+      q6_tax_software: document.getElementById('q6').value,
+      q7_non_ms_tools: document.getElementById('q7').value,
+      q8_copilot: getRadioValue('q8'),
+      q8_license: document.getElementById('q8-license').value,
+      q9_llms: getCheckboxValues('q9') + (document.getElementById('q9-other').value ? ', ' + document.getElementById('q9-other').value : ''),
+      q10_data_maturity: getRadioValue('q10'),
+      q11_admin_burden: document.getElementById('q11').value,
+      q12_data_collection: document.getElementById('q12').value,
+      q13_manual_reliance: getRadioValue('q13'),
+      q14_doc_management: document.getElementById('q14').value,
+      q15_ai_pilots: document.getElementById('q15').value,
+      q16_ai_stance: getRadioValue('q16'),
+      q17_governance: document.getElementById('q17').value,
+      q18_success_vision: document.getElementById('q18').value,
+    };
+
+    // UI: loading state
+    const btn = document.getElementById('submit-btn');
+    const btnLabel = document.getElementById('btn-label');
+    const btnIcon = document.getElementById('btn-icon');
+    btn.disabled = true;
+    btnLabel.textContent = 'Submitting…';
+    btnIcon.outerHTML = '<span class="spinner" id="btn-icon"></span>';
+
+    const statusMsg = document.getElementById('status-msg');
+    statusMsg.textContent = '';
+    statusMsg.className = '';
+
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      // no-cors means we can't read status — treat as success
+      showThankYou();
+
+    } catch (err) {
+      btn.disabled = false;
+      document.getElementById('btn-icon').outerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="btn-icon"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+      btnLabel.textContent = 'Submit Questionnaire';
+      statusMsg.textContent = 'Something went wrong. Please check your connection and try again.';
+      statusMsg.className = 'error';
+    }
+  });
+
+  function showThankYou() {
+    document.getElementById('form-wrapper').style.display = 'none';
+    const ty = document.getElementById('thank-you');
+    ty.classList.add('visible');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>
